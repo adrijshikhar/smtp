@@ -1,4 +1,4 @@
-# SMTP
+# SMTP-SERVER
 
 1. run
 
