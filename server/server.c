@@ -9,8 +9,8 @@
 
 #define TRUE 1
 #define FALSE 0
-#define USERS_DAT_FILE "users.dat"
-#define MAILS_DAT_FILE "mails.dat"
+#define USERS_DAT_FILE "server/users.dat"
+#define MAILS_DAT_FILE "server/mails.dat"
 
 struct SMTP_AUTH_CRED {
   char email[50];
@@ -41,7 +41,7 @@ struct INBOX {
 };
 
 int login(int client_sockfd, struct SMTP_AUTH_CRED *, struct USER *);
-int create_user_and_login(int client_sockfd, struct USER *);
+int create_user_and_login(int client_sockfd, struct USER *, struct USER *);
 void send_status(int client_sockfd, int status_code, char *status_msg);
 void store_mail(int client_sockfd);
 void send_inbox(int client_sockfd, struct USER *);
@@ -51,7 +51,7 @@ int main(int argc, char *argv[])
 {
   struct  sockaddr_in server_addr, client_addr;
   struct  SMTP_AUTH_CRED auth_cred;
-  struct  USER user;
+  struct  USER user, user_check;
   int     sockfd, client_sockfd, port, client_len, option, is_logged_in;
   FILE    *fileptr;
 
@@ -91,12 +91,6 @@ int main(int argc, char *argv[])
       perror("accept");
       continue;
     }
-    
-    /*
-      option: 
-        1 LOGIN
-        2 CREATE ACCOUNT
-    */
 
     recv(client_sockfd, &option, sizeof(option), 0);
 
@@ -107,7 +101,7 @@ int main(int argc, char *argv[])
         break;
     
       case 2:
-        is_logged_in = create_user_and_login(client_sockfd, &user);
+        is_logged_in = create_user_and_login(client_sockfd, &user, &user_check);
         break;
 
       default:
@@ -119,14 +113,7 @@ int main(int argc, char *argv[])
 
     while (TRUE)
     {
-      /*
-        option: 
-          1 COMPOSE
-          2 INBOX
-          3 LOGOUT
-      */
 
-    
       // receive option form client
       recv(client_sockfd, &option, sizeof(option), 0);
 
@@ -160,9 +147,7 @@ int main(int argc, char *argv[])
 int login(int client_sockfd,  struct SMTP_AUTH_CRED *auth_cred, struct USER *user)
 {
   FILE   *users_dat;
-
-      recv(client_sockfd, auth_cred, sizeof(*auth_cred), 0);
-
+  recv(client_sockfd, auth_cred, sizeof(*auth_cred), 0);
   users_dat = fopen(USERS_DAT_FILE, "rb");
   
   if(users_dat == NULL)
@@ -198,7 +183,7 @@ int login(int client_sockfd,  struct SMTP_AUTH_CRED *auth_cred, struct USER *use
   return FALSE;
 }
 
-int create_user_and_login(int client_sockfd, struct USER *user)
+int create_user_and_login(int client_sockfd, struct USER *user, struct USER *user_check)
 {
   FILE   *users_dat;
   
@@ -211,11 +196,27 @@ int create_user_and_login(int client_sockfd, struct USER *user)
     fclose(users_dat);
     return FALSE;
   } 
- 
-  fwrite(user, sizeof(struct USER), 1, users_dat);
-  send_status(client_sockfd, 200, "OK");
+ fread(user_check, sizeof(struct USER), 1, users_dat);
+   
+    if ( strcmp(user->name, user_check->name) != 0)
+    {
+      if ( strcmp(user->email, user_check->email) != 0)
+      {
+        fwrite(user, sizeof(struct USER), 1, users_dat);
+        send_status(client_sockfd, 200, "OK");
+        fclose(users_dat);
+        return TRUE;
+      }
+      else
+      {
+        send_status(client_sockfd, 403, "Email already exists");
+        fclose(users_dat);
+        return FALSE;
+      }
+    }
+  send_status(client_sockfd, 403, "Username or Email already exists");
   fclose(users_dat);
-  return TRUE;  
+  return FALSE;  
   
 }
 
